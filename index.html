@@ -89,7 +89,7 @@
             const [loadingAction, setLoadingAction] = useState(null);
             const [userApiKey, setUserApiKey] = useState("");
 
-            const defaultApiKey = "AIzaSyB3Q57D8fI2vhjP6ceBFDgT-NrDCqpmm_w"; 
+            const defaultApiKey = ""; 
             const getApiKey = () => userApiKey || defaultApiKey;
 
             const decodeQuotedPrintable = (input) => {
@@ -433,8 +433,7 @@
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<LawApp />);
+        ReactDOM.render(<LawApp />, document.getElementById('root'));
     </script>
 </body>
 </html>
