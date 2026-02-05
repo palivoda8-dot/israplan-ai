@@ -1,6 +1,0 @@
-{
-  "name": "israplan-v2",
-  "dependencies": {
-    "node-fetch": "^2.6.7"
-  }
-}
