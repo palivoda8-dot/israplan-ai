@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -46,7 +46,7 @@ const LocationMarker = ({ position, setPosition }) => {
             position={position}
             ref={markerRef}
         >
-            <Popup>Destination (Drag me!)</Popup>
+            <Popup>גרור אותי כדי לשנות מיקום</Popup>
         </Marker>
     );
 };
@@ -62,7 +62,7 @@ const CommuteRadius = () => {
 
     const handleSearch = async () => {
         if (!selectedLocation) {
-            setError("Please select a location on the map.");
+            setError("אנא בחר מיקום על המפה.");
             return;
         }
 
@@ -83,13 +83,7 @@ const CommuteRadius = () => {
             });
 
             if (!response.ok) {
-                // If backend fails (e.g. 404 because not implemented yet), we might fall back to mock data or just show error
-                // For now, let's assume it works or fail gracefully. 
-                // If the user didn't have the API key before, maybe the backend also uses Google Maps API?
-                // The prompt says "Remove the need for VITE_GOOGLE_MAPS_BROWSER_KEY".
-                // If the backend uses Google Maps API (server-side), that's a separate issue, but the prompt is about frontend.
-                // I will keep the fetch call active as per original code.
-                throw new Error('Failed to fetch commute data');
+                throw new Error('שגיאה בחישוב הנתונים');
             }
 
             const data = await response.json();
@@ -101,57 +95,60 @@ const CommuteRadius = () => {
 
         } catch (err) {
             console.error(err);
-            setError(err.message || "An error occurred.");
-            
-            // Fallback for demo purposes if API fails (optional, but good for testing without backend)
-            // console.warn("Using dummy data due to API error");
-            // setResults([...]); 
+            setError(err.message || "אירעה שגיאה.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="p-4 bg-white rounded-lg shadow-md">
-            <h2 className="text-2xl font-bold mb-4">Commute Radius Calculator</h2>
+        <div className="p-6 bg-white rounded-xl shadow-lg" dir="rtl">
+            <h2 className="text-3xl font-bold mb-6 text-gray-800 text-center">מחשבון אזורי יוממות</h2>
 
-            <div className="mb-4 space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Max Travel Time (Minutes): {maxMinutes}</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        זמן נסיעה מקסימלי: <span className="text-indigo-600">{maxMinutes} דקות</span>
+                    </label>
                     <input
                         type="range"
                         min="5"
                         max="120"
                         value={maxMinutes}
                         onChange={(e) => setMaxMinutes(parseInt(e.target.value))}
-                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-2 bg-gradient-to-r from-blue-300 to-indigo-500 rounded-lg appearance-none cursor-pointer"
                     />
                 </div>
 
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Travel Mode</label>
+                <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">אופן הגעה</label>
                     <select
                         value={travelMode}
                         onChange={(e) => setTravelMode(e.target.value)}
-                        className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                        className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     >
-                        <option value="DRIVE">Driving</option>
-                        <option value="TRANSIT">Public Transit</option>
+                        <option value="DRIVE">רכב פרטי</option>
+                        <option value="TRANSIT">תחבורה ציבורית</option>
                     </select>
                 </div>
 
-                <button
-                    onClick={handleSearch}
-                    disabled={loading || !selectedLocation}
-                    className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${loading || !selectedLocation ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500`}
-                >
-                    {loading ? 'Calculating...' : 'Find Commutable Localities'}
-                </button>
-
-                {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
+                <div className="flex items-end">
+                    <button
+                        onClick={handleSearch}
+                        disabled={loading || !selectedLocation}
+                        className={`w-full py-2.5 px-4 border border-transparent rounded-lg shadow-md text-sm font-medium text-white transition-colors duration-200 
+                            ${loading || !selectedLocation 
+                                ? 'bg-gray-400 cursor-not-allowed' 
+                                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'}`}
+                    >
+                        {loading ? 'מחשב...' : 'חשב אזורי יוממות'}
+                    </button>
+                </div>
             </div>
 
-            <div className="mb-4 border rounded-lg overflow-hidden h-[500px]">
+            {error && <div className="mb-4 p-3 bg-red-50 text-red-700 border border-red-200 rounded-md text-sm">{error}</div>}
+
+            <div className="mb-6 border-2 border-gray-200 rounded-xl overflow-hidden h-[500px] shadow-inner relative z-0">
                 <MapContainer
                     center={defaultCenter}
                     zoom={10}
@@ -170,8 +167,10 @@ const CommuteRadius = () => {
                             position={{ lat: loc.lat, lng: loc.lng }}
                         >
                             <Popup>
-                                <strong>{loc.name}</strong><br />
-                                {loc.durationText} ({loc.distanceText})
+                                <div className="text-right" dir="rtl">
+                                    <strong className="text-lg">{loc.name}</strong><br />
+                                    <span className="text-gray-600">{loc.durationText} ({loc.distanceText})</span>
+                                </div>
                             </Popup>
                         </Marker>
                     ))}
@@ -179,15 +178,17 @@ const CommuteRadius = () => {
             </div>
 
             {results.length > 0 && (
-                <div className="mt-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Results ({results.length} localities found)</h3>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-96 overflow-y-auto">
+                <div className="mt-8">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 px-2 border-r-4 border-indigo-500">תוצאות ({results.length} ישובים נמצאו)</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto p-2 custom-scrollbar">
                         {results.map((loc, idx) => (
-                            <div key={idx} className="relative rounded-lg border border-gray-300 bg-white px-6 py-5 shadow-sm flex items-center space-x-3 hover:border-gray-400 focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                                <div className="flex-1 min-w-0">
-                                    <span className="absolute inset-0" aria-hidden="true" />
-                                    <p className="text-sm font-medium text-gray-900">{loc.name}</p>
-                                    <p className="text-sm text-gray-500 truncate">{loc.durationText} ({loc.distanceText})</p>
+                            <div key={idx} className="relative group bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 hover:border-indigo-300">
+                                <div className="flex flex-col">
+                                    <p className="text-lg font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{loc.name}</p>
+                                    <div className="flex justify-between items-center mt-2 text-sm text-gray-500">
+                                        <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full">{loc.durationText}</span>
+                                        <span>{loc.distanceText}</span>
+                                    </div>
                                 </div>
                             </div>
                         ))}
