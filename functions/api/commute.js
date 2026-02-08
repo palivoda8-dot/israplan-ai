@@ -17,7 +17,6 @@ export async function onRequestPost(context) {
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // Phase 1: Pre-filter by air distance to limit OSRM batch size (250 closest)
     const candidates = localities
       .map(loc => ({
         ...loc,
@@ -28,9 +27,8 @@ export async function onRequestPost(context) {
 
     const coords = candidates.map(loc => `${loc.lng},${loc.lat}`).join(';');
     const allCoords = `${destination.lng},${destination.lat};${coords}`;
-    
-    // sourceIndices 1..N (localities), destinations 0 (user point)
     const sourceIndices = Array.from({length: candidates.length}, (_, i) => i + 1).join(';');
+    
     const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0&annotations=duration,distance`;
 
     const osrmResponse = await fetch(osrmUrl);
@@ -43,30 +41,35 @@ export async function onRequestPost(context) {
     const results = candidates.map((loc, i) => {
       const durationSeconds = osrmData.durations[i][0];
       const distanceMeters = osrmData.distances ? osrmData.distances[i][0] : 0;
+      const km = distanceMeters / 1000;
       
-      // Calculate multiplier based on location
-      const multiplier = getTrafficMultiplier(loc.lat, loc.lng);
+      // Fine-tuned Multiplier Logic
+      let multiplier = getTrafficMultiplier(loc.lat, loc.lng);
+      
+      // Distance-based adjustment: Short trips in urban areas take relatively more time due to traffic lights
+      if (km < 5 && multiplier >= 1.3) {
+        multiplier += 0.15; // Extra penalty for short urban trips (Givatayim style)
+      } else if (km > 20) {
+        multiplier -= 0.05; // Slightly faster on long inter-city stretches
+      }
       
       const rawMinutes = durationSeconds / 60;
       const adjustedMinutes = Math.round(rawMinutes * multiplier);
-      const km = (distanceMeters / 1000).toFixed(1);
+      const displayKm = km.toFixed(1);
       
       return {
         ...loc,
         minutes: adjustedMinutes,
-        km: parseFloat(km),
+        km: parseFloat(displayKm),
         durationText: `${adjustedMinutes} דקות`,
-        distanceText: `${km} ק"מ`
+        distanceText: `${displayKm} ק"מ`
       };
     }).filter(loc => loc.minutes <= (maxMinutes || 30));
 
     results.sort((a, b) => a.minutes - b.minutes);
 
     return new Response(JSON.stringify({ results }), {
-      headers: { 
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache"
-      }
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" }
     });
 
   } catch (error) {
@@ -78,26 +81,23 @@ export async function onRequestPost(context) {
 }
 
 function getTrafficMultiplier(lat, lng) {
-  // גבולות גיאוגרפיים משוערים לישראל
+  // Jerusalem Area (Wider radius)
+  if (lat > 31.65 && lat < 31.95 && lng > 35.05 && lng < 35.35) return 1.45;
   
-  // ירושלים (רדיוס סביב העיר) - הוחמר ל-1.40
-  if (lat > 31.7 && lat < 31.9 && lng > 35.1 && lng < 35.3) return 1.40;
+  // Gush Dan / Central Israel (The heavy core)
+  if (lat > 31.95 && lat < 32.25 && lng > 34.70 && lng < 34.95) return 1.55; // Increased to handle short urban lags
   
-  // מרכז / גוש דן (נתניה עד אשדוד) - הוחמר ל-1.45
-  if (lat > 31.8 && lat < 32.4 && lng > 34.7 && lng < 35.0) return 1.45;
+  // Sharon Area (Herzliya to Netanya)
+  if (lat >= 32.25 && lat < 32.5 && lng > 34.75 && lng < 35.0) return 1.35;
   
-  // חיפה והקריות
-  if (lat > 32.7 && lat < 33.0 && lng > 34.9 && lng < 35.2) return 1.20;
+  // Haifa & Krayot
+  if (lat > 32.7 && lat < 33.05 && lng > 34.9 && lng < 35.2) return 1.25;
   
-  // אילת והערבה (דרומית למצפה רמון)
-  if (lat < 30.0) return 1.10;
+  // South & Beer Sheva
+  if (lat > 30.5 && lat < 31.5) return 1.15;
   
-  // דרום / באר שבע
-  if (lat > 30.0 && lat < 31.5) return 1.12;
-  
-  // צפון (צפונית לחיפה/טבריה)
-  if (lat >= 33.0) return 1.15;
+  // North / Galilee
+  if (lat >= 33.05) return 1.18;
 
-  // ברירת מחדל
-  return 1.15;
+  return 1.20;
 }
