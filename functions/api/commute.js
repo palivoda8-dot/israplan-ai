@@ -12,11 +12,16 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Fetch localities from the same origin
+    // Fetch localities from the same origin - check both potential paths
     const url = new URL(request.url);
-    const localitiesResponse = await fetch(`${url.origin}/data/localities.json`);
-    if (!localitiesResponse.ok) {
-      throw new Error("Failed to load localities.json");
+    let localitiesResponse = await fetch(`${url.origin}/data/localities.json`);
+    
+    if (!localitiesResponse.ok || localitiesResponse.headers.get("content-type")?.includes("text/html")) {
+      localitiesResponse = await fetch(`${url.origin}/localities.json`);
+    }
+
+    if (!localitiesResponse.ok || localitiesResponse.headers.get("content-type")?.includes("text/html")) {
+      throw new Error("Could not find localities.json at /data/localities.json or /localities.json");
     }
     const localities = await localitiesResponse.json();
 
