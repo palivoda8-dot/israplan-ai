@@ -1,3 +1,5 @@
+import localities from '../data/localities.json';
+
 export async function onRequestPost(context) {
   const { request } = context;
   
@@ -12,24 +14,10 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Fetch localities from the same origin - check both potential paths
-    const url = new URL(request.url);
-    let localitiesResponse = await fetch(`${url.origin}/data/localities.json`);
-    
-    if (!localitiesResponse.ok || localitiesResponse.headers.get("content-type")?.includes("text/html")) {
-      localitiesResponse = await fetch(`${url.origin}/localities.json`);
-    }
-
-    if (!localitiesResponse.ok || localitiesResponse.headers.get("content-type")?.includes("text/html")) {
-      throw new Error("Could not find localities.json at /data/localities.json or /localities.json");
-    }
-    const localities = await localitiesResponse.json();
-
-    // Map travel modes to OSRM profiles
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // To stay within OSRM and Worker limits, we'll take the 150 closest by air distance
+    // OSRM Table API limits. We'll take the 150 closest by air distance
     const sortedLocalities = localities
       .map(loc => ({
         ...loc,
@@ -41,7 +29,6 @@ export async function onRequestPost(context) {
     const coords = sortedLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
     const allCoords = `${destination.lng},${destination.lat};${coords}`;
     
-    // destination is index 0, sources are 1 to N
     const sourceIndices = Array.from({length: sortedLocalities.length}, (_, i) => i + 1).join(';');
     const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0`;
 
