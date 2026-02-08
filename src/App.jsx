@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Upload, AlertCircle, CheckCircle, Sparkles, X, PenTool, HelpCircle, CheckSquare, Hash, Type, Scale } from 'lucide-react';
+import { Search, Upload, AlertCircle, CheckCircle, Sparkles, X, PenTool, HelpCircle, CheckSquare, Hash, Type, Scale, MapPin } from 'lucide-react';
 import AdUnit from './components/AdUnit';
+import CommuteRadius from './components/CommuteRadius';
 import { parseFileContent, extractSectionsFromHTML } from './utils/fileParser';
 
 const LawApp = () => {
@@ -181,19 +182,20 @@ const LawApp = () => {
                         <div className="bg-blue-600 p-2 rounded-lg text-white"><Scale size={24} /></div>
                         <div><h1 className="text-xl font-bold leading-none">חוק התכנון והבניה</h1><span className="text-xs text-slate-500">עוזר משפטי חכם</span></div>
                     </div>
-                    {sections.length > 0 && (
-                        <div className="flex bg-slate-100 p-1 rounded-lg">
-                            <button onClick={() => setActiveTab('chat')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex gap-2 ${activeTab === 'chat' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Sparkles size={16} /> שאל את החוק</button>
-                            <button onClick={() => setActiveTab('search')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex gap-2 ${activeTab === 'search' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Search size={16} /> איתור וחיפוש</button>
-                        </div>
-                    )}
+                    <div className="flex bg-slate-100 p-1 rounded-lg">
+                        <button onClick={() => setActiveTab('chat')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex gap-2 ${activeTab === 'chat' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Sparkles size={16} /> שאל את החוק</button>
+                        <button onClick={() => setActiveTab('search')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex gap-2 ${activeTab === 'search' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><Search size={16} /> איתור וחיפוש</button>
+                        <button onClick={() => setActiveTab('commute')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex gap-2 ${activeTab === 'commute' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500'}`}><MapPin size={16} /> רדיוס יוממות</button>
+                    </div>
                 </div>
             </header>
 
             <main className="max-w-5xl mx-auto px-4 py-8">
                 <AdUnit position="באנר עליון" slotId="1234567890" />
 
-                {sections.length === 0 ? (
+                {activeTab === 'commute' ? (
+                    <CommuteRadius />
+                ) : sections.length === 0 ? (
                     <div className="max-w-xl mx-auto mt-4 text-center">
                         <h2 className="text-3xl font-bold mb-2">טען את קובץ החוק</h2>
                         <p className="text-slate-600 mb-8">המערכת תומכת בקבצי HTML/MHTML מנבו</p>
