@@ -80,11 +80,11 @@ export async function onRequestPost(context) {
 function getTrafficMultiplier(lat, lng) {
   // גבולות גיאוגרפיים משוערים לישראל
   
-  // ירושלים (רדיוס סביב העיר)
-  if (lat > 31.7 && lat < 31.9 && lng > 35.1 && lng < 35.3) return 1.25;
+  // ירושלים (רדיוס סביב העיר) - הוחמר ל-1.40
+  if (lat > 31.7 && lat < 31.9 && lng > 35.1 && lng < 35.3) return 1.40;
   
-  // מרכז / גוש דן (נתניה עד אשדוד)
-  if (lat > 31.8 && lat < 32.4 && lng > 34.7 && lng < 35.0) return 1.30;
+  // מרכז / גוש דן (נתניה עד אשדוד) - הוחמר ל-1.45
+  if (lat > 31.8 && lat < 32.4 && lng > 34.7 && lng < 35.0) return 1.45;
   
   // חיפה והקריות
   if (lat > 32.7 && lat < 33.0 && lng > 34.9 && lng < 35.2) return 1.20;
