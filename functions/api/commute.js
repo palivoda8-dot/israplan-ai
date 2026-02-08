@@ -61,59 +61,69 @@ export async function onRequestPost(context) {
 
         const url = `${OSRM_BASE_URL}/${batchCoords.join(';')}?sources=${sources}&destinations=${destinations}`;
 
-        try {
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`OSRM batch failed: ${response.status}`);
-            
-            const data = await response.json();
-            if (data.code !== 'Ok' || !data.durations) continue;
+        let success = false;
+        let retries = 2;
 
-            // data.durations is array of arrays: [ [dur_src1_to_dest], [dur_src2_to_dest]... ]
-            // correspond to batch[0], batch[1]...
-            
-            batch.forEach((loc, idx) => {
-                const durationRow = data.durations[idx];
-                if (!durationRow) return;
-                
-                const durationSeconds = durationRow[0];
-                if (durationSeconds === null) return;
-
-                // Accuracy improvement: Add traffic buffer (15%) for driving
-                // OSRM provides free-flow speeds. Real life has traffic.
-                const trafficMultiplier = profile === 'driving' ? (
-                    // Center region / Gush Dan (Heavy traffic)
-                    (loc.lat > 31.9 && loc.lat < 32.35 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
-                    // Jerusalem Area (Significant traffic)
-                    (loc.lat > 31.7 && loc.lat < 31.85 && loc.lng > 35.1 && loc.lng < 35.3) ? 1.25 :
-                    // Haifa & Krayot (Moderate-Heavy traffic)
-                    (loc.lat > 32.7 && loc.lat < 32.9 && loc.lng > 34.9 && loc.lng < 35.1) ? 1.20 :
-                    // North (Light-Moderate traffic)
-                    (loc.lat >= 32.35) ? 1.15 :
-                    // South / Beer Sheva (Light traffic)
-                    (loc.lat <= 31.3 && loc.lat >= 30.0) ? 1.12 :
-                    // Eilat / Deep South (Very light traffic)
-                    (loc.lat < 30.0) ? 1.10 :
-                    // Default for anything else (like Judea and Samaria areas not covered)
-                    1.15
-                ) : 1.0;
-                const durationMinutes = Math.round((durationSeconds * trafficMultiplier) / 60);
-
-                if (durationMinutes <= maxMinutes) {
-                    allResults.push({
-                        ...loc,
-                        durationText: `${durationMinutes} min`,
-                        durationValue: durationSeconds * trafficMultiplier,
-                        distanceText: "Calc by OSRM",
-                        distanceValue: 0
-                    });
+        while (!success && retries > 0) {
+            try {
+                const response = await fetch(url);
+                if (response.status === 429) {
+                    // Rate limited - wait and retry
+                    await new Promise(r => setTimeout(r, 500));
+                    retries--;
+                    continue;
                 }
-            });
+                
+                if (!response.ok) throw new Error(`OSRM batch failed: ${response.status}`);
+                
+                const data = await response.json();
+                if (data.code !== 'Ok' || !data.durations) {
+                    retries--;
+                    continue;
+                }
 
-        } catch (err) {
-            console.error(`Batch ${i} failed`, err);
+                success = true;
+                // data.durations is array of arrays: [ [dur_src1_to_dest], [dur_src2_to_dest]... ]
+                batch.forEach((loc, idx) => {
+                    const durationRow = data.durations[idx];
+                    if (!durationRow) return;
+                    
+                    const durationSeconds = durationRow[0];
+                    if (durationSeconds === null) return;
+
+                    const multiplier = profile === 'driving' ? (
+                        (loc.lat > 31.9 && loc.lat < 32.35 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
+                        (loc.lat > 31.7 && loc.lat < 31.85 && loc.lng > 35.1 && loc.lng < 35.3) ? 1.25 :
+                        (loc.lat > 32.7 && loc.lat < 32.9 && loc.lng > 34.9 && loc.lng < 35.1) ? 1.20 :
+                        (loc.lat >= 32.35) ? 1.15 :
+                        (loc.lat <= 31.3 && loc.lat >= 30.0) ? 1.12 :
+                        (loc.lat < 30.0) ? 1.10 :
+                        1.15
+                    ) : 1.0;
+                    
+                    const durationMinutes = Math.round((durationSeconds * multiplier) / 60);
+
+                    if (durationMinutes <= maxMinutes) {
+                        allResults.push({
+                            ...loc,
+                            durationText: `${durationMinutes} דק׳`,
+                            durationValue: durationSeconds * multiplier,
+                            distanceText: `${(durationSeconds * 0.015).toFixed(1)} ק״מ (משוער)`,
+                            distanceValue: durationSeconds * 0.015 * 1000
+                        });
+                    }
+                });
+            } catch (err) {
+                console.error(`Batch retry failed`, err);
+                retries--;
+                if (retries > 0) await new Promise(r => setTimeout(r, 300));
+            }
         }
-        
-        // Removed artificial delay to speed up processing
+    }
+
+    // FINAL FALLBACK: If OSRM returned nothing or failed completely, use calculation logic
+    if (allResults.length === 0) {
+        return calculateFallback(destination, maxMinutes);
     }
 
     // Sort by duration
