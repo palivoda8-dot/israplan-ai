@@ -32,12 +32,20 @@ export async function onRequestPost(context) {
 
     // We allow a larger batch size to process more localities at once.
     // Note: Public OSRM server has URL length limits. If localities grow > 100, we might need to lower this or switch to POST.
-    const BATCH_SIZE = 50;
+    const BATCH_SIZE = 40;
     const allResults = [];
-    
-    // We process localities in chunks
-    for (let i = 0; i < localities.length; i += BATCH_SIZE) {
-        const batch = localities.slice(i, i + BATCH_SIZE);
+
+    // Pre-filter localities based on straight-line distance to save OSRM requests
+    // Assuming 120km/h max speed (2km per min) + 20% buffer for winding roads
+    const maxEstimatedKm = maxMinutes * 2.5; 
+    const filteredLocalities = localities.filter(loc => {
+        const dist = getDistanceFromLatLonInKm(destination.lat, destination.lng, loc.lat, loc.lng);
+        return dist <= maxEstimatedKm;
+    });
+
+    // We process filtered localities in chunks
+    for (let i = 0; i < filteredLocalities.length; i += BATCH_SIZE) {
+        const batch = filteredLocalities.slice(i, i + BATCH_SIZE);
         
         // Prepare coords for this batch: [destination, ...batchLocalities]
         // Index 0 is destination. Indices 1..batch.length are the batch localities.
