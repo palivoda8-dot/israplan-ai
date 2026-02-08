@@ -5,8 +5,6 @@ export async function onRequestPost(context) {
     const body = await request.json();
     const { destination, maxMinutes, travelMode } = body;
 
-    console.log("Commute Request:", { destination, maxMinutes, travelMode });
-
     if (!destination || !destination.lat || !destination.lng) {
       return new Response(JSON.stringify({ error: "Missing destination" }), {
         status: 400,
@@ -14,24 +12,19 @@ export async function onRequestPost(context) {
       });
     }
 
-    // Fetch localities.json using a relative URL to ensure it works in Pages
     const url = new URL(request.url);
     const localitiesUrl = `${url.origin}/data/localities.json`;
     const locRes = await fetch(localitiesUrl);
     
     if (!locRes.ok) {
-      return new Response(JSON.stringify({ error: "Could not load localities data from " + localitiesUrl }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
+      throw new Error("Could not load localities data");
     }
     
     const localities = await locRes.json();
-
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // Haversine distance for initial filtering (100km radius) to stay efficient
+    // Haversine filter
     const filteredLocalities = localities.filter(loc => {
       const dLat = (loc.lat - destination.lat) * Math.PI / 180;
       const dLon = (loc.lng - destination.lng) * Math.PI / 180;
@@ -39,11 +32,11 @@ export async function onRequestPost(context) {
                 Math.cos(destination.lat * Math.PI / 180) * Math.cos(loc.lat * Math.PI / 180) *
                 Math.sin(dLon/2) * Math.sin(dLon/2);
       const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return (6371 * c) <= 100; // Only check places within 100km
-    }).slice(0, 100);
+      return (6371 * c) <= 120; // Up to 120km
+    }).slice(0, 150);
 
     if (filteredLocalities.length === 0) {
-      return new Response(JSON.stringify({ results: [], message: "No localities within 100km" }), {
+      return new Response(JSON.stringify({ results: [] }), {
         headers: { "Content-Type": "application/json" }
       });
     }
@@ -55,27 +48,28 @@ export async function onRequestPost(context) {
     const osrmData = await osrmResponse.json();
 
     if (osrmData.code !== 'Ok') {
-      throw new Error("OSRM error: " + osrmData.code);
+      throw new Error("OSRM error");
     }
 
     const results = filteredLocalities.map((loc, i) => {
-      const durationSeconds = osrmData.durations[0][i+1]; // index 0 is destination, sources are 1..N
+      const durationSeconds = osrmData.durations[0][i+1];
       const distanceMeters = osrmData.distances ? osrmData.distances[0][i+1] : 0;
+      const minutes = Math.round(durationSeconds / 60);
+      const km = parseFloat((distanceMeters / 1000).toFixed(1));
       
       return {
         ...loc,
-        minutes: Math.round(durationSeconds / 60),
-        km: parseFloat((distanceMeters / 1000).toFixed(1))
+        minutes: minutes,
+        km: km,
+        durationText: `${minutes} דק'`,
+        distanceText: `${km} ק"מ`
       };
     }).filter(loc => loc.minutes <= (maxMinutes || 30));
 
     results.sort((a, b) => a.minutes - b.minutes);
 
     return new Response(JSON.stringify({ results }), {
-      headers: { 
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*" 
-      }
+      headers: { "Content-Type": "application/json" }
     });
 
   } catch (error) {
