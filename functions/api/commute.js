@@ -1,3 +1,5 @@
+import localities from '../data/localities.json';
+
 export async function onRequestPost(context) {
   const { request } = context;
   
@@ -12,56 +14,43 @@ export async function onRequestPost(context) {
       });
     }
 
-    const url = new URL(request.url);
-    const localitiesUrl = `${url.origin}/data/localities.json`;
-    const locRes = await fetch(localitiesUrl);
-    
-    if (!locRes.ok) {
-      throw new Error("Could not load localities data");
-    }
-    
-    const localities = await locRes.json();
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // Haversine filter
-    const filteredLocalities = localities.filter(loc => {
-      const dLat = (loc.lat - destination.lat) * Math.PI / 180;
-      const dLon = (loc.lng - destination.lng) * Math.PI / 180;
-      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                Math.cos(destination.lat * Math.PI / 180) * Math.cos(loc.lat * Math.PI / 180) *
-                Math.sin(dLon/2) * Math.sin(dLon/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      return (6371 * c) <= 120; // Up to 120km
-    }).slice(0, 150);
+    // To provide a "serious and good" answer, we sort by air distance first 
+    // but we increase the limit to 200 localities to be more comprehensive.
+    const sortedLocalities = localities
+      .map(loc => ({
+        ...loc,
+        airDist: Math.sqrt(Math.pow(loc.lat - destination.lat, 2) + Math.pow(loc.lng - destination.lng, 2))
+      }))
+      .sort((a, b) => a.airDist - b.airDist)
+      .slice(0, 200);
 
-    if (filteredLocalities.length === 0) {
-      return new Response(JSON.stringify({ results: [] }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    const coords = filteredLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
-    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${destination.lng},${destination.lat};${coords}?sources=0&annotations=duration,distance`;
+    const coords = sortedLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
+    const allCoords = `${destination.lng},${destination.lat};${coords}`;
+    
+    const sourceIndices = Array.from({length: sortedLocalities.length}, (_, i) => i + 1).join(';');
+    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0&annotations=duration,distance`;
 
     const osrmResponse = await fetch(osrmUrl);
     const osrmData = await osrmResponse.json();
 
     if (osrmData.code !== 'Ok') {
-      throw new Error("OSRM error");
+      throw new Error("OSRM API error: " + osrmData.code);
     }
 
-    const results = filteredLocalities.map((loc, i) => {
-      const durationSeconds = osrmData.durations[0][i+1];
-      const distanceMeters = osrmData.distances ? osrmData.distances[0][i+1] : 0;
+    const results = sortedLocalities.map((loc, i) => {
+      const durationSeconds = osrmData.durations[i][0];
+      const distanceMeters = osrmData.distances ? osrmData.distances[i][0] : 0;
       const minutes = Math.round(durationSeconds / 60);
-      const km = parseFloat((distanceMeters / 1000).toFixed(1));
+      const km = (distanceMeters / 1000).toFixed(1);
       
       return {
         ...loc,
         minutes: minutes,
-        km: km,
-        durationText: `${minutes} דק'`,
+        km: parseFloat(km),
+        durationText: `${minutes} דקות`,
         distanceText: `${km} ק"מ`
       };
     }).filter(loc => loc.minutes <= (maxMinutes || 30));
@@ -69,7 +58,10 @@ export async function onRequestPost(context) {
     results.sort((a, b) => a.minutes - b.minutes);
 
     return new Response(JSON.stringify({ results }), {
-      headers: { "Content-Type": "application/json" }
+      headers: { 
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache" // Ensure no caching for live testing
+      }
     });
 
   } catch (error) {
