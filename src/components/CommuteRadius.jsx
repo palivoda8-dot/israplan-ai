@@ -142,12 +142,15 @@ const CommuteRadius = () => {
         try {
             setShowBuffer(false); // Reset buffer on new search
             
-            // Use relative path for API
+            // RELATIVE PATH IS BEST FOR PRODUCTION
             const apiUrl = '/api/commute';
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
                 body: JSON.stringify({
                     destination: selectedLocation,
                     maxMinutes: maxMinutes,
@@ -156,7 +159,8 @@ const CommuteRadius = () => {
             });
 
             if (!response.ok) {
-                throw new Error('שגיאה בחישוב הנתונים');
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'שגיאה בחישוב הנתונים');
             }
 
             const data = await response.json();
@@ -167,8 +171,8 @@ const CommuteRadius = () => {
             setResults(data.results || []);
 
         } catch (err) {
-            console.error(err);
-            setError(err.message || "אירעה שגיאה.");
+            console.error('Fetch error:', err);
+            setError(err.message || "אירעה שגיאה בחיבור לשרת.");
         } finally {
             setLoading(false);
         }

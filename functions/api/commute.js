@@ -6,30 +6,39 @@ export async function onRequestPost(context) {
     const body = await request.json();
     const { destination, maxMinutes, travelMode } = body;
 
+    // 1. Validation
     if (!destination || !destination.lat || !destination.lng) {
-      return new Response(JSON.stringify({ error: "Missing destination coordinates" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing destination coordinates" }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
     if (!maxMinutes) {
-      return new Response(JSON.stringify({ error: "Missing maxMinutes" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing maxMinutes" }), { 
+        status: 400,
+        headers: { "Content-Type": "application/json" }
+      });
     }
 
-    // Map travelMode to OSRM profiles
+    // 2. Setup
     let profile = 'driving';
     if (travelMode === 'WALK' || travelMode === 'walking') profile = 'foot';
     if (travelMode === 'BICYCLE' || travelMode === 'bicycling') profile = 'bike';
 
-    const OSRM_BASE_URL = `http://router.project-osrm.org/table/v1/${profile}`;
+    const OSRM_BASE_URL = `https://router.project-osrm.org/table/v1/${profile}`;
     const BATCH_SIZE = 40;
     const allResults = [];
 
-    // Pre-filter localities based on straight-line distance to save OSRM requests
+    // 3. Pre-filter localities (Heuristic)
+    // Assuming max speed 120km/h (2km/min) + buffer for winding roads/traffic
     const maxEstimatedKm = maxMinutes * 2.5; 
     const filteredLocalities = localities.filter(loc => {
         const dist = getDistanceFromLatLonInKm(destination.lat, destination.lng, loc.lat, loc.lng);
         return dist <= maxEstimatedKm;
     });
 
+    // 4. Processing in batches
     for (let i = 0; i < filteredLocalities.length; i += BATCH_SIZE) {
         const batch = filteredLocalities.slice(i, i + BATCH_SIZE);
         const batchCoords = [
@@ -45,14 +54,18 @@ export async function onRequestPost(context) {
 
         while (!success && retries > 0) {
             try {
-                const response = await fetch(url);
+                // IMPORTANT: Public OSRM usually blocks HTTP, must use HTTPS
+                const response = await fetch(url, {
+                    headers: { 'User-Agent': 'IsraplanApp/1.0' }
+                });
+                
                 if (response.status === 429) {
-                    await new Promise(r => setTimeout(r, 500));
+                    await new Promise(r => setTimeout(r, 600)); // Cool down
                     retries--;
                     continue;
                 }
                 
-                if (!response.ok) throw new Error(`OSRM batch failed: ${response.status}`);
+                if (!response.ok) throw new Error(`OSRM Status: ${response.status}`);
                 
                 const data = await response.json();
                 if (data.code !== 'Ok' || !data.durations) {
@@ -68,13 +81,11 @@ export async function onRequestPost(context) {
                     const durationSeconds = durationRow[0];
                     if (durationSeconds === null) return;
 
+                    // Traffic heuristic
                     const multiplier = profile === 'driving' ? (
                         (loc.lat > 31.9 && loc.lat < 32.35 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
                         (loc.lat > 31.7 && loc.lat < 31.85 && loc.lng > 35.1 && loc.lng < 35.3) ? 1.25 :
                         (loc.lat > 32.7 && loc.lat < 32.9 && loc.lng > 34.9 && loc.lng < 35.1) ? 1.20 :
-                        (loc.lat >= 32.35) ? 1.15 :
-                        (loc.lat <= 31.3 && loc.lat >= 30.0) ? 1.12 :
-                        (loc.lat < 30.0) ? 1.10 :
                         1.15
                     ) : 1.0;
                     
@@ -91,25 +102,32 @@ export async function onRequestPost(context) {
                     }
                 });
             } catch (err) {
-                console.error(`Batch retry failed`, err);
+                console.error(`Batch ${i} error`, err);
                 retries--;
-                if (retries > 0) await new Promise(r => setTimeout(r, 300));
+                if (retries > 0) await new Promise(r => setTimeout(r, 400));
             }
         }
     }
 
-    // FINAL FALLBACK: If OSRM returned nothing or failed completely, use calculation logic
+    // 5. Final fallback
     if (allResults.length === 0) {
         return calculateFallback(destination, maxMinutes);
     }
 
     allResults.sort((a, b) => a.durationValue - b.durationValue);
+    
     return new Response(JSON.stringify({ results: allResults }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*" 
+        },
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: "Internal Server Error", details: error.message }), { 
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+    });
   }
 }
 
@@ -133,24 +151,23 @@ function calculateFallback(destination, maxMinutes) {
     
     return new Response(JSON.stringify({ 
         results, 
-        warning: "Used straight-line distance fallback (OSRM unavailable)" 
+        warning: "Fallback calculation used" 
     }), {
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+        },
     });
 }
 
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   const R = 6371; 
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
-}
-
-function deg2rad(deg) {
-  return deg * (Math.PI / 180);
 }
