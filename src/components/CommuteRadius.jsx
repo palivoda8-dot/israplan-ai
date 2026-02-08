@@ -142,9 +142,8 @@ const CommuteRadius = () => {
         try {
             setShowBuffer(false); // Reset buffer on new search
             
-            // Define API URL based on environment
-            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            const apiUrl = isLocal ? '/api/commute' : 'https://israplan-ai-backend.vercel.app/api/commute';
+            // Use relative path for API
+            const apiUrl = '/api/commute';
 
             const response = await fetch(apiUrl, {
                 method: 'POST',
