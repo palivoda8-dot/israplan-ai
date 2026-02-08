@@ -1,43 +1,66 @@
 export async function onRequestPost(context) {
-  const { request, env } = context;
+  const { request } = context;
   
   try {
     const body = await request.json();
     const { destination, maxMinutes, travelMode } = body;
 
     if (!destination || !destination.lat || !destination.lng) {
-      return new Response(JSON.stringify({ error: "Missing destination" }), { 
+      return new Response(JSON.stringify({ error: "Missing destination" }), {
         status: 400,
         headers: { "Content-Type": "application/json" }
       });
     }
 
-    // Since we are in a Cloudflare Worker environment, we need to handle the data import carefully.
-    // In Cloudflare Pages Functions, we can't always rely on top-level imports of large JSON files if not configured.
-    // However, the standard way is to have it in the project.
-    
-    // For now, let's ensure the logic is robust and uses HTTPS for OSRM.
-    const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' : 
-                    (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bike' : 'driving';
+    // Fetch localities from the same origin
+    const url = new URL(request.url);
+    const localitiesResponse = await fetch(`${url.origin}/data/localities.json`);
+    if (!localitiesResponse.ok) {
+      throw new Error("Failed to load localities.json");
+    }
+    const localities = await localitiesResponse.json();
 
-    // We'll use a smaller, faster batch for Cloudflare to stay within execution limits
-    const BATCH_SIZE = 30;
+    // Map travel modes to OSRM profiles
+    const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
+                    (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
+
+    // To stay within OSRM and Worker limits, we'll take the 150 closest by air distance
+    const sortedLocalities = localities
+      .map(loc => ({
+        ...loc,
+        airDist: Math.sqrt(Math.pow(loc.lat - destination.lat, 2) + Math.pow(loc.lng - destination.lng, 2))
+      }))
+      .sort((a, b) => a.airDist - b.airDist)
+      .slice(0, 150);
+
+    const coords = sortedLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
+    const allCoords = `${destination.lng},${destination.lat};${coords}`;
     
-    // NOTE: In a real Cloudflare environment, 'localities' would be passed via context or imported.
-    // Assuming the build process bundles the JSON correctly.
-    
-    // I will rewrite this to be a standalone-safe version for the calculation.
-    // If the OSRM fetch fails or is slow, we return a success with calculated results.
-    
-    return new Response(JSON.stringify({ 
-      results: [], 
-      message: "Worker active. Please ensure localities.json is correctly bundled." 
-    }), {
+    // destination is index 0, sources are 1 to N
+    const sourceIndices = Array.from({length: sortedLocalities.length}, (_, i) => i + 1).join(';');
+    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0`;
+
+    const osrmResponse = await fetch(osrmUrl);
+    const osrmData = await osrmResponse.json();
+
+    if (osrmData.code !== 'Ok') {
+      throw new Error("OSRM API error: " + osrmData.code);
+    }
+
+    const results = sortedLocalities.map((loc, i) => {
+      const durationSeconds = osrmData.durations[i][0];
+      return {
+        ...loc,
+        minutes: Math.round(durationSeconds / 60)
+      };
+    }).filter(loc => loc.minutes <= (maxMinutes || 30));
+
+    return new Response(JSON.stringify({ results }), {
       headers: { "Content-Type": "application/json" }
     });
 
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { 
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" }
     });
