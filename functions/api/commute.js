@@ -73,11 +73,19 @@ export async function onRequestPost(context) {
                 // Accuracy improvement: Add traffic buffer (15%) for driving
                 // OSRM provides free-flow speeds. Real life has traffic.
                 const trafficMultiplier = profile === 'driving' ? (
-                    // Center region (approximate bounding box for Gush Dan/Central)
-                    (loc.lat > 31.9 && loc.lat < 32.3 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
-                    // Eilat / South (usually less traffic but long stretches)
+                    // Center region / Gush Dan (Heavy traffic)
+                    (loc.lat > 31.9 && loc.lat < 32.35 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
+                    // Jerusalem Area (Significant traffic)
+                    (loc.lat > 31.7 && loc.lat < 31.85 && loc.lng > 35.1 && loc.lng < 35.3) ? 1.25 :
+                    // Haifa & Krayot (Moderate-Heavy traffic)
+                    (loc.lat > 32.7 && loc.lat < 32.9 && loc.lng > 34.9 && loc.lng < 35.1) ? 1.20 :
+                    // North (Light-Moderate traffic)
+                    (loc.lat >= 32.35) ? 1.15 :
+                    // South / Beer Sheva (Light traffic)
+                    (loc.lat <= 31.3 && loc.lat >= 30.0) ? 1.12 :
+                    // Eilat / Deep South (Very light traffic)
                     (loc.lat < 30.0) ? 1.10 :
-                    // Default
+                    // Default for anything else (like Judea and Samaria areas not covered)
                     1.15
                 ) : 1.0;
                 const durationMinutes = Math.round((durationSeconds * trafficMultiplier) / 60);
