@@ -375,6 +375,23 @@ const CommuteRadius = () => {
                             </div>
                         ))}
                     </div>
+                    
+                    <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                        <strong>שימו לב:</strong> זמני הנסיעה מחושבים על סמך ממוצעים (OSRM) וכוללים תוספת משוערת לפקקים. 
+                        לזמן אמת מדויק, מומלץ להשתמש בקישורי Waze/Google Maps המצורפים לכל תוצאה.
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-gray-200 text-center">
+                        <p className="text-gray-600 mb-4">נהנים מהכלי? עזרו לנו להחזיק את השרתים באוויר 🚀</p>
+                        <div className="flex justify-center gap-4">
+                            <a href="#" className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-bold py-2 px-6 rounded-full shadow-md transition-colors flex items-center gap-2">
+                                ☕ קנה לי קפה
+                            </a>
+                            <div className="bg-gray-100 border border-gray-300 text-gray-500 py-2 px-6 rounded-full text-xs flex items-center">
+                                [מקום לפרסומת / חסות]
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

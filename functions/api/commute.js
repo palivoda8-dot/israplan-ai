@@ -30,7 +30,7 @@ export async function onRequestPost(context) {
     // Instead of one giant request which might hit length limits, let's batch them.
     // 25 localities per batch is safer.
 
-    const BATCH_SIZE = 25;
+    const BATCH_SIZE = 10;
     const allResults = [];
     
     // We process localities in chunks
@@ -68,13 +68,16 @@ export async function onRequestPost(context) {
                 const durationSeconds = durationRow[0];
                 if (durationSeconds === null) return;
 
-                const durationMinutes = Math.round(durationSeconds / 60);
+                // Accuracy improvement: Add traffic buffer (15%) for driving
+                // OSRM provides free-flow speeds. Real life has traffic.
+                const trafficMultiplier = profile === 'driving' ? 1.15 : 1.0;
+                const durationMinutes = Math.round((durationSeconds * trafficMultiplier) / 60);
 
                 if (durationMinutes <= maxMinutes) {
                     allResults.push({
                         ...loc,
                         durationText: `${durationMinutes} min`,
-                        durationValue: durationSeconds,
+                        durationValue: durationSeconds * trafficMultiplier,
                         distanceText: "Calc by OSRM",
                         distanceValue: 0
                     });
@@ -85,7 +88,8 @@ export async function onRequestPost(context) {
             console.error(`Batch ${i} failed`, err);
         }
         
-        // Rate limiting: brief pause? OSRM public usually okay with 2 requests back-to-back.
+        // Rate limiting: brief pause to be polite to the demo server
+        await new Promise(r => setTimeout(r, 200));
     }
 
     // Sort by duration
