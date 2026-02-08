@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -20,6 +20,13 @@ L.Icon.Default.mergeOptions({
 // Component to handle map clicks and draggable marker
 const LocationMarker = ({ position, setPosition }) => {
     const markerRef = useRef(null);
+    const map = useMap();
+
+    useEffect(() => {
+        if (position) {
+            map.flyTo(position, 13);
+        }
+    }, [position, map]);
 
     const eventHandlers = useMemo(
         () => ({
@@ -59,6 +66,33 @@ const CommuteRadius = () => {
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    
+    // New state variables
+    const [addressQuery, setAddressQuery] = useState('');
+    const [addressResults, setAddressResults] = useState([]);
+    const [detailedRoute, setDetailedRoute] = useState(null); // For storing geometry of a specific route
+
+    const handleAddressSearch = async () => {
+        if (!addressQuery) return;
+        
+        try {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(addressQuery)}&countrycodes=il`);
+            const data = await response.json();
+            setAddressResults(data);
+        } catch (err) {
+            console.error("Address search failed", err);
+            setError("שגיאה בחיפוש כתובת");
+        }
+    };
+
+    const selectAddress = (result) => {
+        const newLocation = { lat: parseFloat(result.lat), lng: parseFloat(result.lon) };
+        setSelectedLocation(newLocation);
+        setAddressResults([]); // Clear search results
+        setAddressQuery(result.display_name); // Update input with full name
+        setDetailedRoute(null); // Clear any previous route
+        setResults([]); // Clear previous commute results
+    };
 
     const handleSearch = async () => {
         if (!selectedLocation) {
@@ -69,6 +103,7 @@ const CommuteRadius = () => {
         setLoading(true);
         setError(null);
         setResults([]);
+        setDetailedRoute(null);
 
         try {
             // Use the real API endpoint
@@ -101,11 +136,118 @@ const CommuteRadius = () => {
         }
     };
 
+    const fetchDetailedRoute = async (destination) => {
+        if (!selectedLocation) return;
+        
+        try {
+            const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${selectedLocation.lng},${selectedLocation.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`);
+            const data = await response.json();
+            
+            if (data.routes && data.routes.length > 0) {
+                const route = data.routes[0];
+                const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]); // Swap to lat,lng
+                setDetailedRoute({
+                    positions: coordinates,
+                    summary: route.legs[0]?.summary
+                });
+            }
+        } catch (err) {
+            console.error("Failed to fetch route", err);
+            // Non-critical error, maybe just alert or log
+        }
+    };
+
+    const NavigationLinks = ({ lat, lng, mode }) => {
+        if (mode === 'DRIVE') {
+            return (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                    <a 
+                        href={`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 border border-blue-200"
+                        title="נווט עם Waze"
+                    >
+                        🚗 Waze
+                    </a>
+                    <a 
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 border border-green-200"
+                        title="נווט עם Google Maps"
+                    >
+                        🗺️ Maps
+                    </a>
+                </div>
+            );
+        } else {
+            // Transit / Other
+            return (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                    <a 
+                        href={`https://moovitapp.com/?to=Lat_${lat}_Lon_${lng}&tll=${lat}_${lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded hover:bg-orange-200 border border-orange-200"
+                        title="נווט עם Moovit"
+                    >
+                        🚌 Moovit
+                    </a>
+                    <a 
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 border border-green-200"
+                        title="נווט עם Google Maps (תחב״צ)"
+                    >
+                        🗺️ Maps
+                    </a>
+                </div>
+            );
+        }
+    };
+
     return (
         <div className="p-6 bg-white rounded-xl shadow-lg" dir="rtl">
             <h2 className="text-3xl font-bold mb-6 text-gray-800 text-center">מחשבון אזורי יוממות</h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                
+                {/* Address Search */}
+                <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100 relative">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">הכנס כתובת מוצא</label>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={addressQuery}
+                            onChange={(e) => setAddressQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleAddressSearch()}
+                            placeholder="תל אביב, ירושלים..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        <button 
+                            onClick={handleAddressSearch}
+                            className="bg-indigo-600 text-white px-3 py-2 rounded-md hover:bg-indigo-700"
+                        >
+                            חפש
+                        </button>
+                    </div>
+                    {addressResults.length > 0 && (
+                        <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-48 overflow-y-auto">
+                            {addressResults.map((result) => (
+                                <li 
+                                    key={result.place_id} 
+                                    onClick={() => selectAddress(result)}
+                                    className="px-3 py-2 hover:bg-indigo-50 cursor-pointer text-sm border-b last:border-0"
+                                >
+                                    {result.display_name}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+
                 <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                         זמן נסיעה מקסימלי: <span className="text-indigo-600">{maxMinutes} דקות</span>
@@ -161,6 +303,28 @@ const CommuteRadius = () => {
                     
                     <LocationMarker position={selectedLocation} setPosition={setSelectedLocation} />
 
+                    {/* Spider Lines (Star Pattern) */}
+                    {selectedLocation && results.map((loc, index) => (
+                        <Polyline
+                            key={`line-${index}`}
+                            positions={[
+                                [selectedLocation.lat, selectedLocation.lng],
+                                [loc.lat, loc.lng]
+                            ]}
+                            pathOptions={{ color: 'purple', weight: 1, opacity: 0.3, dashArray: '5, 10' }}
+                        />
+                    ))}
+
+                    {/* Detailed Route */}
+                    {detailedRoute && (
+                         <Polyline
+                            positions={detailedRoute.positions}
+                            pathOptions={{ color: 'blue', weight: 5, opacity: 0.8 }}
+                        >
+                             <Popup>מסלול נסיעה {detailedRoute.summary ? `(דרך ${detailedRoute.summary})` : ''}</Popup>
+                        </Polyline>
+                    )}
+
                     {results.map((loc, index) => (
                         <Marker
                             key={index}
@@ -169,7 +333,16 @@ const CommuteRadius = () => {
                             <Popup>
                                 <div className="text-right" dir="rtl">
                                     <strong className="text-lg">{loc.name}</strong><br />
-                                    <span className="text-gray-600">{loc.durationText} ({loc.distanceText})</span>
+                                    <span className="text-gray-600">{loc.durationText} ({loc.distanceText})</span><br/>
+                                    <div className="flex flex-col gap-1 mt-2">
+                                        <button 
+                                            onClick={() => fetchDetailedRoute(loc)}
+                                            className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 w-full text-center"
+                                        >
+                                            הצג מסלול
+                                        </button>
+                                        <NavigationLinks lat={loc.lat} lng={loc.lng} mode={travelMode} />
+                                    </div>
                                 </div>
                             </Popup>
                         </Marker>
@@ -188,6 +361,15 @@ const CommuteRadius = () => {
                                     <div className="flex justify-between items-center mt-2 text-sm text-gray-500">
                                         <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded-full">{loc.durationText}</span>
                                         <span>{loc.distanceText}</span>
+                                    </div>
+                                    <div className="flex flex-col gap-2 mt-3">
+                                        <button 
+                                            onClick={() => fetchDetailedRoute(loc)}
+                                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium text-right"
+                                        >
+                                            הצג מסלול על המפה
+                                        </button>
+                                        <NavigationLinks lat={loc.lat} lng={loc.lng} mode={travelMode} />
                                     </div>
                                 </div>
                             </div>
