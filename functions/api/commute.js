@@ -30,7 +30,9 @@ export async function onRequestPost(context) {
     // Instead of one giant request which might hit length limits, let's batch them.
     // 25 localities per batch is safer.
 
-    const BATCH_SIZE = 10;
+    // We allow a larger batch size to process more localities at once.
+    // Note: Public OSRM server has URL length limits. If localities grow > 100, we might need to lower this or switch to POST.
+    const BATCH_SIZE = 100;
     const allResults = [];
     
     // We process localities in chunks
@@ -88,8 +90,7 @@ export async function onRequestPost(context) {
             console.error(`Batch ${i} failed`, err);
         }
         
-        // Rate limiting: brief pause to be polite to the demo server
-        await new Promise(r => setTimeout(r, 200));
+        // Removed artificial delay to speed up processing
     }
 
     // Sort by duration
