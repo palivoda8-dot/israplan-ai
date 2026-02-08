@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polyline, useMap, LayersControl, LayerGroup, Circle } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polyline, useMap, LayersControl, LayerGroup, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -66,7 +66,41 @@ const CommuteRadius = () => {
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [showBuffer, setShowBuffer] = useState(false);
     
+    // Function to calculate Convex Hull for the results
+    const calculateHull = (points) => {
+        if (!points || points.length < 3) return points.map(p => [p.lat, p.lng]);
+        
+        // Simple Monotone Chain algorithm for Convex Hull
+        const sorted = [...points].sort((a, b) => a.lat !== b.lat ? a.lat - b.lat : a.lng - b.lng);
+        
+        const crossProduct = (a, b, c) => (b.lng - a.lng) * (c.lat - a.lat) - (b.lat - a.lat) * (c.lng - a.lng);
+        
+        const lower = [];
+        for (const p of sorted) {
+            while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+            lower.push(p);
+        }
+        
+        const upper = [];
+        for (let i = sorted.length - 1; i >= 0; i--) {
+            const p = sorted[i];
+            while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+            upper.push(p);
+        }
+        
+        upper.pop();
+        lower.pop();
+        return lower.concat(upper).map(p => [p.lat, p.lng]);
+    };
+
+    const hullPoints = useMemo(() => {
+        if (!showBuffer || results.length === 0) return [];
+        // Include the starting location in the hull
+        return calculateHull([...results, selectedLocation]);
+    }, [showBuffer, results, selectedLocation]);
+
     // New state variables
     const [addressQuery, setAddressQuery] = useState('');
     const [addressResults, setAddressResults] = useState([]);
@@ -106,6 +140,7 @@ const CommuteRadius = () => {
         setDetailedRoute(null);
 
         try {
+            setShowBuffer(false); // Reset buffer on new search
             // Use the real API endpoint
             const response = await fetch('/api/commute', {
                 method: 'POST',
@@ -339,19 +374,20 @@ const CommuteRadius = () => {
                     
                     <LocationMarker position={selectedLocation} setPosition={setSelectedLocation} />
 
-                    {/* Distance Buffer (Visual radius based on time) */}
-                    {selectedLocation && (
-                        <Circle
-                            center={[selectedLocation.lat, selectedLocation.lng]}
-                            radius={maxMinutes * 800} // ~800 meters per minute as a conservative visual guide
+                    {/* Dynamic Commute Area Polygon (Buffer) */}
+                    {showBuffer && hullPoints.length > 0 && (
+                        <Polygon
+                            positions={hullPoints}
                             pathOptions={{
                                 color: '#6366f1',
                                 fillColor: '#6366f1',
-                                fillOpacity: 0.1,
-                                weight: 1,
+                                fillOpacity: 0.2,
+                                weight: 2,
                                 dashArray: '5, 5'
                             }}
-                        />
+                        >
+                            <Popup>אזור יוממות משוער</Popup>
+                        </Polygon>
                     )}
 
                     {/* Spider Lines (Star Pattern) */}
@@ -403,7 +439,17 @@ const CommuteRadius = () => {
 
             {results.length > 0 && (
                 <div className="mt-8">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4 px-2 border-r-4 border-indigo-500">תוצאות ({results.length} ישובים נמצאו)</h3>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-xl font-bold text-gray-800 px-2 border-r-4 border-indigo-500">תוצאות ({results.length} ישובים נמצאו)</h3>
+                        <button
+                            onClick={() => setShowBuffer(!showBuffer)}
+                            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${showBuffer 
+                                ? 'bg-indigo-600 text-white shadow-inner' 
+                                : 'bg-white text-indigo-600 border border-indigo-600 hover:bg-indigo-50 shadow-sm'}`}
+                        >
+                            {showBuffer ? '✨ הסתר אזור יוממות' : '✨ הצג אזור יוממות על המפה'}
+                        </button>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto p-2 custom-scrollbar">
                         {results.map((loc, idx) => (
                             <div key={idx} className="relative group bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 hover:border-indigo-300">
