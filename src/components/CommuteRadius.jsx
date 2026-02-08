@@ -250,16 +250,29 @@ const CommuteRadius = () => {
 
                 <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        זמן נסיעה מקסימלי: <span className="text-indigo-600">{maxMinutes} דקות</span>
+                        זמן נסיעה מקסימלי (דקות)
                     </label>
-                    <input
-                        type="range"
-                        min="5"
-                        max="120"
-                        value={maxMinutes}
-                        onChange={(e) => setMaxMinutes(parseInt(e.target.value))}
-                        className="w-full h-2 bg-gradient-to-r from-blue-300 to-indigo-500 rounded-lg appearance-none cursor-pointer"
-                    />
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="range"
+                            min="5"
+                            max="120"
+                            value={maxMinutes}
+                            onChange={(e) => setMaxMinutes(parseInt(e.target.value))}
+                            className="flex-grow h-2 bg-gradient-to-r from-blue-300 to-indigo-500 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <input
+                            type="number"
+                            min="5"
+                            max="120"
+                            value={maxMinutes}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                if (!isNaN(val)) setMaxMinutes(Math.min(Math.max(val, 1), 300));
+                            }}
+                            className="w-16 px-2 py-1 border border-gray-300 rounded-md text-center font-bold text-indigo-600 focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                    </div>
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
@@ -388,11 +401,35 @@ const CommuteRadius = () => {
                                     <div className="flex flex-col gap-2 mt-3">
                                         <button 
                                             onClick={() => fetchDetailedRoute(loc)}
-                                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium text-right"
+                                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium text-right flex items-center justify-end gap-1"
                                         >
-                                            הצג מסלול על המפה
+                                            📍 הצג מסלול על המפה
                                         </button>
-                                        <NavigationLinks destLat={loc.lat} destLng={loc.lng} mode={travelMode} originLat={selectedLocation.lat} originLng={selectedLocation.lng} />
+                                        
+                                        <div className="flex gap-2 mt-1">
+                                            {loc.name.includes("אילת") ? (
+                                                <a 
+                                                    href="https://www.facebook.com/baiteilat/?locale=he_IL"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex-1 text-center py-1.5 px-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors font-bold"
+                                                >
+                                                    🏠 דירות באילת
+                                                </a>
+                                            ) : (
+                                                <a 
+                                                    href={`https://www.yad2.co.il/realestate/rent?address_home=${encodeURIComponent(loc.name)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex-1 text-center py-1.5 px-2 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition-colors font-bold"
+                                                >
+                                                    🏠 דירות להשכרה
+                                                </a>
+                                            )}
+                                            <div className="flex-1">
+                                                <NavigationLinks destLat={loc.lat} destLng={loc.lng} mode={travelMode} originLat={selectedLocation.lat} originLng={selectedLocation.lng} />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
