@@ -1,11 +1,11 @@
-import localities from '../data/localities.json';
-
 export async function onRequestPost(context) {
   const { request } = context;
   
   try {
     const body = await request.json();
     const { destination, maxMinutes, travelMode } = body;
+
+    console.log("Commute Request:", { destination, maxMinutes, travelMode });
 
     if (!destination || !destination.lat || !destination.lng) {
       return new Response(JSON.stringify({ error: "Missing destination" }), {
@@ -14,36 +14,53 @@ export async function onRequestPost(context) {
       });
     }
 
+    // Fetch localities.json using a relative URL to ensure it works in Pages
+    const url = new URL(request.url);
+    const localitiesUrl = `${url.origin}/data/localities.json`;
+    const locRes = await fetch(localitiesUrl);
+    
+    if (!locRes.ok) {
+      return new Response(JSON.stringify({ error: "Could not load localities data from " + localitiesUrl }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+    
+    const localities = await locRes.json();
+
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // Selection of 150 closest by air distance to stay within OSRM limits
-    const sortedLocalities = localities
-      .map(loc => ({
-        ...loc,
-        airDist: Math.sqrt(Math.pow(loc.lat - destination.lat, 2) + Math.pow(loc.lng - destination.lng, 2))
-      }))
-      .sort((a, b) => a.airDist - b.airDist)
-      .slice(0, 150);
+    // Haversine distance for initial filtering (100km radius) to stay efficient
+    const filteredLocalities = localities.filter(loc => {
+      const dLat = (loc.lat - destination.lat) * Math.PI / 180;
+      const dLon = (loc.lng - destination.lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(destination.lat * Math.PI / 180) * Math.cos(loc.lat * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return (6371 * c) <= 100; // Only check places within 100km
+    }).slice(0, 100);
 
-    const coords = sortedLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
-    const allCoords = `${destination.lng},${destination.lat};${coords}`;
-    
-    // sourceIndices 1..N (localities), destinations 0 (user point)
-    const sourceIndices = Array.from({length: sortedLocalities.length}, (_, i) => i + 1).join(';');
-    // Requesting both durations and distances
-    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0&annotations=duration,distance`;
+    if (filteredLocalities.length === 0) {
+      return new Response(JSON.stringify({ results: [], message: "No localities within 100km" }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    const coords = filteredLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
+    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${destination.lng},${destination.lat};${coords}?sources=0&annotations=duration,distance`;
 
     const osrmResponse = await fetch(osrmUrl);
     const osrmData = await osrmResponse.json();
 
     if (osrmData.code !== 'Ok') {
-      throw new Error("OSRM API error: " + osrmData.code);
+      throw new Error("OSRM error: " + osrmData.code);
     }
 
-    const results = sortedLocalities.map((loc, i) => {
-      const durationSeconds = osrmData.durations[i][0];
-      const distanceMeters = osrmData.distances ? osrmData.distances[i][0] : 0;
+    const results = filteredLocalities.map((loc, i) => {
+      const durationSeconds = osrmData.durations[0][i+1]; // index 0 is destination, sources are 1..N
+      const distanceMeters = osrmData.distances ? osrmData.distances[0][i+1] : 0;
       
       return {
         ...loc,
@@ -52,11 +69,13 @@ export async function onRequestPost(context) {
       };
     }).filter(loc => loc.minutes <= (maxMinutes || 30));
 
-    // Sort by minutes for a cleaner result
     results.sort((a, b) => a.minutes - b.minutes);
 
     return new Response(JSON.stringify({ results }), {
-      headers: { "Content-Type": "application/json" }
+      headers: { 
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*" 
+      }
     });
 
   } catch (error) {
