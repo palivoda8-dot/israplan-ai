@@ -72,7 +72,14 @@ export async function onRequestPost(context) {
 
                 // Accuracy improvement: Add traffic buffer (15%) for driving
                 // OSRM provides free-flow speeds. Real life has traffic.
-                const trafficMultiplier = profile === 'driving' ? 1.15 : 1.0;
+                const trafficMultiplier = profile === 'driving' ? (
+                    // Center region (approximate bounding box for Gush Dan/Central)
+                    (loc.lat > 31.9 && loc.lat < 32.3 && loc.lng > 34.7 && loc.lng < 35.0) ? 1.30 : 
+                    // Eilat / South (usually less traffic but long stretches)
+                    (loc.lat < 30.0) ? 1.10 :
+                    // Default
+                    1.15
+                ) : 1.0;
                 const durationMinutes = Math.round((durationSeconds * trafficMultiplier) / 60);
 
                 if (durationMinutes <= maxMinutes) {
