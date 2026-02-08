@@ -208,6 +208,34 @@ const CommuteRadius = () => {
         }
     };
 
+    // Helper to get traffic multiplier based on location (same as backend)
+    const getTrafficMultiplier = (lat, lng) => {
+        // Center region / Gush Dan
+        if (lat > 31.9 && lat < 32.35 && lng > 34.7 && lng < 35.0) return 1.30;
+        // Jerusalem Area
+        if (lat > 31.7 && lat < 31.85 && lng > 35.1 && lng < 35.3) return 1.25;
+        // Haifa & Krayot
+        if (lat > 32.7 && lat < 32.9 && lng > 34.9 && lng < 35.1) return 1.20;
+        // North
+        if (lat >= 32.35) return 1.15;
+        // South / Beer Sheva
+        if (lat <= 31.3 && lat >= 30.0) return 1.12;
+        // Eilat / Deep South
+        if (lat < 30.0) return 1.10;
+        // Default
+        return 1.15;
+    };
+
+    const calculatedRadius = useMemo(() => {
+        if (!selectedLocation) return 0;
+        const multiplier = getTrafficMultiplier(selectedLocation.lat, selectedLocation.lng);
+        // Base assumption: 1km per minute (60km/h) before traffic multiplier
+        // Distance = (Time / Multiplier) * Speed
+        // We use 900 meters per minute as base speed (approx 54km/h average)
+        const baseSpeedMetersPerMin = 900; 
+        return (maxMinutes / multiplier) * baseSpeedMetersPerMin;
+    }, [selectedLocation, maxMinutes]);
+
     return (
         <div className="p-6 bg-white rounded-xl shadow-lg" dir="rtl">
             <h2 className="text-3xl font-bold mb-6 text-gray-800 text-center">מחשבון אזורי יוממות</h2>
@@ -339,11 +367,11 @@ const CommuteRadius = () => {
                     
                     <LocationMarker position={selectedLocation} setPosition={setSelectedLocation} />
 
-                    {/* Distance Buffer (Visual radius based on time) */}
+                    {/* Distance Buffer (Visual radius synchronized with traffic logic) */}
                     {selectedLocation && (
                         <Circle
                             center={[selectedLocation.lat, selectedLocation.lng]}
-                            radius={maxMinutes * 800} // ~800 meters per minute as a conservative visual guide
+                            radius={calculatedRadius}
                             pathOptions={{
                                 color: '#6366f1',
                                 fillColor: '#6366f1',
