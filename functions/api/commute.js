@@ -32,7 +32,7 @@ export async function onRequestPost(context) {
 
     // We allow a larger batch size to process more localities at once.
     // Note: Public OSRM server has URL length limits. If localities grow > 100, we might need to lower this or switch to POST.
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = 50;
     const allResults = [];
     
     // We process localities in chunks
