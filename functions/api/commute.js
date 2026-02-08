@@ -17,7 +17,7 @@ export async function onRequestPost(context) {
     const profile = (travelMode === 'WALK' || travelMode === 'walking') ? 'foot' :
                     (travelMode === 'BICYCLE' || travelMode === 'bicycling') ? 'bicycle' : 'car';
 
-    // OSRM Table API limits. We'll take the 150 closest by air distance
+    // Selection of 150 closest by air distance to stay within OSRM limits
     const sortedLocalities = localities
       .map(loc => ({
         ...loc,
@@ -29,8 +29,10 @@ export async function onRequestPost(context) {
     const coords = sortedLocalities.map(loc => `${loc.lng},${loc.lat}`).join(';');
     const allCoords = `${destination.lng},${destination.lat};${coords}`;
     
+    // sourceIndices 1..N (localities), destinations 0 (user point)
     const sourceIndices = Array.from({length: sortedLocalities.length}, (_, i) => i + 1).join(';');
-    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0`;
+    // Requesting both durations and distances
+    const osrmUrl = `https://router.project-osrm.org/table/v1/${profile}/${allCoords}?sources=${sourceIndices}&destinations=0&annotations=duration,distance`;
 
     const osrmResponse = await fetch(osrmUrl);
     const osrmData = await osrmResponse.json();
@@ -41,11 +43,17 @@ export async function onRequestPost(context) {
 
     const results = sortedLocalities.map((loc, i) => {
       const durationSeconds = osrmData.durations[i][0];
+      const distanceMeters = osrmData.distances ? osrmData.distances[i][0] : 0;
+      
       return {
         ...loc,
-        minutes: Math.round(durationSeconds / 60)
+        minutes: Math.round(durationSeconds / 60),
+        km: parseFloat((distanceMeters / 1000).toFixed(1))
       };
     }).filter(loc => loc.minutes <= (maxMinutes || 30));
+
+    // Sort by minutes for a cleaner result
+    results.sort((a, b) => a.minutes - b.minutes);
 
     return new Response(JSON.stringify({ results }), {
       headers: { "Content-Type": "application/json" }
