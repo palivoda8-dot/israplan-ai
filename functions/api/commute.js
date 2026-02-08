@@ -41,21 +41,23 @@ export async function onRequestPost(context) {
     const results = candidates.map((loc, i) => {
       const durationSeconds = osrmData.durations[i][0];
       const distanceMeters = osrmData.distances ? osrmData.distances[i][0] : 0;
-      const km = distanceMeters / 1000;
+      
+      // Road distance in KM
+      const roadKm = distanceMeters / 1000;
       
       // Fine-tuned Multiplier Logic
       let multiplier = getTrafficMultiplier(loc.lat, loc.lng);
       
-      // Distance-based adjustment: Short trips in urban areas take relatively more time due to traffic lights
-      if (km < 5 && multiplier >= 1.3) {
-        multiplier += 0.15; // Extra penalty for short urban trips (Givatayim style)
-      } else if (km > 20) {
-        multiplier -= 0.05; // Slightly faster on long inter-city stretches
+      // Distance-based adjustment: Short trips in urban areas take relatively more time
+      if (roadKm < 5 && multiplier >= 1.3) {
+        multiplier += 0.20; // Increased penalty for short urban trips
+      } else if (roadKm > 20) {
+        multiplier -= 0.05;
       }
       
       const rawMinutes = durationSeconds / 60;
       const adjustedMinutes = Math.round(rawMinutes * multiplier);
-      const displayKm = km.toFixed(1);
+      const displayKm = roadKm.toFixed(1);
       
       return {
         ...loc,
