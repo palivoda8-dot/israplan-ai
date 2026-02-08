@@ -121,11 +121,6 @@ export async function onRequestPost(context) {
         }
     }
 
-    // FINAL FALLBACK: If OSRM returned nothing or failed completely, use calculation logic
-    if (allResults.length === 0) {
-        return calculateFallback(destination, maxMinutes);
-    }
-
     // Sort by duration
     allResults.sort((a, b) => a.durationValue - b.durationValue);
 
