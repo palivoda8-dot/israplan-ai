@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polyline, useMap, LayersControl, LayerGroup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Polyline, useMap, LayersControl, LayerGroup, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -338,6 +338,21 @@ const CommuteRadius = () => {
                     </LayersControl>
                     
                     <LocationMarker position={selectedLocation} setPosition={setSelectedLocation} />
+
+                    {/* Distance Buffer (Visual radius based on time) */}
+                    {selectedLocation && (
+                        <Circle
+                            center={[selectedLocation.lat, selectedLocation.lng]}
+                            radius={maxMinutes * 800} // ~800 meters per minute as a conservative visual guide
+                            pathOptions={{
+                                color: '#6366f1',
+                                fillColor: '#6366f1',
+                                fillOpacity: 0.1,
+                                weight: 1,
+                                dashArray: '5, 5'
+                            }}
+                        />
+                    )}
 
                     {/* Spider Lines (Star Pattern) */}
                     {selectedLocation && results.map((loc, index) => (
