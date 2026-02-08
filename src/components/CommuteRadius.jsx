@@ -157,12 +157,12 @@ const CommuteRadius = () => {
         }
     };
 
-    const NavigationLinks = ({ lat, lng, mode }) => {
+    const NavigationLinks = ({ destLat, destLng, mode, originLat, originLng }) => {
         if (mode === 'DRIVE') {
             return (
                 <div className="flex gap-2 mt-2 flex-wrap">
                     <a 
-                        href={`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`}
+                        href={`https://waze.com/ul?ll=${destLat},${destLng}&navigate=yes&from=${originLat},${originLng}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 border border-blue-200"
@@ -171,7 +171,7 @@ const CommuteRadius = () => {
                         🚗 Waze
                     </a>
                     <a 
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`}
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destLat},${destLng}&travelmode=driving`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 border border-green-200"
@@ -186,7 +186,7 @@ const CommuteRadius = () => {
             return (
                 <div className="flex gap-2 mt-2 flex-wrap">
                     <a 
-                        href={`https://moovitapp.com/?to=Lat_${lat}_Lon_${lng}&tll=${lat}_${lng}`}
+                        href={`https://moovitapp.com/?from=Lat_${originLat}_Lon_${originLng}&to=Lat_${destLat}_Lon_${destLng}&tll=${destLat}_${destLng}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded hover:bg-orange-200 border border-orange-200"
@@ -195,7 +195,7 @@ const CommuteRadius = () => {
                         🚌 Moovit
                     </a>
                     <a 
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=transit`}
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${destLat},${destLng}&travelmode=transit`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200 border border-green-200"
@@ -311,7 +311,7 @@ const CommuteRadius = () => {
                                 [selectedLocation.lat, selectedLocation.lng],
                                 [loc.lat, loc.lng]
                             ]}
-                            pathOptions={{ color: 'purple', weight: 1, opacity: 0.3, dashArray: '5, 10' }}
+                            pathOptions={{ color: '#8b5cf6', weight: 3, opacity: 0.6, dashArray: '10, 10' }}
                         />
                     ))}
 
@@ -341,7 +341,7 @@ const CommuteRadius = () => {
                                         >
                                             הצג מסלול
                                         </button>
-                                        <NavigationLinks lat={loc.lat} lng={loc.lng} mode={travelMode} />
+                                        <NavigationLinks destLat={loc.lat} destLng={loc.lng} mode={travelMode} originLat={selectedLocation.lat} originLng={selectedLocation.lng} />
                                     </div>
                                 </div>
                             </Popup>
@@ -369,7 +369,7 @@ const CommuteRadius = () => {
                                         >
                                             הצג מסלול על המפה
                                         </button>
-                                        <NavigationLinks lat={loc.lat} lng={loc.lng} mode={travelMode} />
+                                        <NavigationLinks destLat={loc.lat} destLng={loc.lng} mode={travelMode} originLat={selectedLocation.lat} originLng={selectedLocation.lng} />
                                     </div>
                                 </div>
                             </div>
