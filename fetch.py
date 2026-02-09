@@ -1,1 +1,0 @@
-import requests\nimport json\n\nurl = 'https://data.gov.il/api/3/action/datastore_search?resource_id=d4901968-dad3-4845-a9b0-a57d027f11ab&limit=2000'\nresponse = requests.get(url)\ndata = response.json()\nwith open('localities_final.json', 'w', encoding='utf-8') as f:\n    json.dump(data['result']['records'], f, ensure_ascii=False, indent=2)
