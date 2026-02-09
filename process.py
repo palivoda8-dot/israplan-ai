@@ -1,0 +1,1 @@
+import json; data = json.load(open(" localities_itmlocal.json\, encoding=\utf-8-sig\)); res = []; [res.append({\name\: r.get(" \, \\).strip(), \x\: float(r.get(" \, 0)), \y\: float(r.get(" \, 0))}) for r in data]; print(len(res))
